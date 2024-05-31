@@ -1,0 +1,25 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json
+name: train_model
+display_name: Train a linear, gradient boosting or random forest regression model
+version: 1
+type: command
+inputs:
+  training_data: 
+    type: uri_file
+  algorithm:
+    type: string
+    default: 'linear-regression'
+  target_feature:
+    type: string
+    default: 'CPC'
+outputs:
+  model_output:
+    type: mlflow_model
+code: ./src
+environment: azureml://registries/azureml/environments/sklearn-1.1/versions/34
+command: >-
+  python train-model.py 
+  --training_data ${{inputs.training_data}} 
+  --algorithm ${{inputs.algorithm}} 
+  --target_feature ${{inputs.target_feature}} 
+  --model_output ${{outputs.model_output}} 

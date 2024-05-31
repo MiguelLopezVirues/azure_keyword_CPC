@@ -1,0 +1,15 @@
+2024/05/30 08:12:57 INFO mlflow.tracking.fluent: Autologging successfully enabled for sklearn.
+2024/05/30 08:12:58 INFO mlflow.utils.autologging_utils: Created MLflow autologging run with ID '5b5c6080-325a-4705-a1de-65366d04f621', which will track hyperparameters, performance metrics, model artifacts, and lineage information for the current sklearn workflow
+2024/05/30 08:13:00 WARNING mlflow.utils.autologging_utils: MLflow autologging encountered a warning: "/azureml-envs/sklearn-0.24.1/lib/python3.7/site-packages/_distutils_hack/__init__.py:33: UserWarning: Setuptools is replacing distutils."
+
+
+
+************************************************************
+Modeling with 4 columns and 1119 rows of data
+Splitting data...
+Training model...
+RMSE: 0.3539857014925901
+************************************************************
+
+
+
