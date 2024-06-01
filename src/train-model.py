@@ -7,7 +7,7 @@ import numpy as np
 from sklearn.model_selection import train_test_split
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import GradientBoostingRegressor, RandomForestRegressor
-from sklearn.metrics import mean_squared_error
+from sklearn.metrics import mean_absolute_error
 import matplotlib.pyplot as plt
 
 def main(args):
@@ -55,8 +55,9 @@ def train_model(algorithm,X_train, X_test, y_train, y_test):
 def eval_model(model, X_test, y_test):
 
     y_pred = model.predict(X_test)
-    rmse = np.sqrt(mean_squared_error(y_pred, y_test))
-    print('RMSE:', rmse)
+    mae = mean_absolute_error(y_pred, y_test)
+    mlflow.log_param('MAE',mae)
+    print('MAE:', mae)
 
 
 def parse_args():
