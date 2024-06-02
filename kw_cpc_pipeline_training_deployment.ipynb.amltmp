@@ -1,11 +1,94 @@
 {
   "cells": [
     {
+      "cell_type": "markdown",
+      "source": [
+        "## Pipeline training and deployment"
+      ],
+      "metadata": {
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
+        }
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "After having developed a machine learning model through with an exploratory approach in the previous notebook, the next step is to register the model to put it into production by deploying it on an online deployment. \n",
+        "\n",
+        "Although the previously developed model could have been logged via MLFlow and then registered and deployed, are trained again making use of pipeline jobs. Therefore, data preparation and training scripts are written to create yaml pipeline components that complete the training process in sequence. \n",
+        "\n",
+        "Finally the model logged by MLFlow during the pipeline job is registered and deployed to 100% traffic on an Azure managed online deployment."
+      ],
+      "metadata": {
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
+        }
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "\n",
+        "#### Import libraries"
+      ],
+      "metadata": {
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
+        }
+      }
+    },
+    {
       "cell_type": "code",
       "source": [
+        "import os\n",
         "from azure.ai.ml import MLClient\n",
         "from azure.identity import DefaultAzureCredential\n",
-        "\n",
+        "from azure.ai.ml import load_component\n",
+        "from azure.ai.ml import Input\n",
+        "from azure.ai.ml.constants import AssetTypes\n",
+        "from azure.ai.ml.dsl import pipeline\n",
+        "from azure.ai.ml.entities import AmlCompute"
+      ],
+      "outputs": [],
+      "execution_count": 1,
+      "metadata": {
+        "jupyter": {
+          "source_hidden": false,
+          "outputs_hidden": false
+        },
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
+        },
+        "gather": {
+          "logged": 1717328741787
+        }
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "## Connect to the MLClient"
+      ],
+      "metadata": {
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
+        }
+      }
+    },
+    {
+      "cell_type": "code",
+      "source": [
         "ml_client = MLClient(\n",
         "    DefaultAzureCredential(), \"e1f27d73-68d8-4f59-900b-77783d4c5b3b\", \"End2endCPC\", \"End2End_CPC\"\n",
         ")\n"
@@ -19,11 +102,21 @@
       }
     },
     {
+      "cell_type": "markdown",
+      "source": [
+        "Create a _src_ directory to store the generated data preparation and training scripts."
+      ],
+      "metadata": {
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
+        }
+      }
+    },
+    {
       "cell_type": "code",
       "source": [
-        "import os\n",
-        "\n",
-        "# create a folder for the script files\n",
         "script_folder = 'src'\n",
         "os.makedirs(script_folder, exist_ok=True)\n",
         "print(script_folder, 'folder created')"
@@ -52,10 +145,35 @@
       }
     },
     {
+      "cell_type": "markdown",
+      "source": [
+        "### Training via pipeline jobs"
+      ],
+      "metadata": {
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
+        }
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "##### Definition of scripts to prepare the data and train the model"
+      ],
+      "metadata": {
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
+        }
+      }
+    },
+    {
       "cell_type": "code",
       "source": [
         "%%writefile src/prepare-data.py\n",
-        "# import libraries\n",
         "import argparse\n",
         "import pandas as pd\n",
         "import numpy as np\n",
@@ -77,7 +195,6 @@
         "    df = pd.read_csv(path)\n",
         "\n",
         "    print(f'Preparing {df.shape[1]} columns and {df.shape[0]} rows of data')\n",
-        "    print(df.dtypes)\n",
         "\n",
         "    df = df.drop(\"keyword\",axis=1)\n",
         "    \n",
@@ -110,19 +227,15 @@
         "    return df\n",
         "\n",
         "def parse_args():\n",
-        "    # setup arg parser\n",
         "    parser = argparse.ArgumentParser()\n",
         "\n",
-        "    # add arguments\n",
         "    parser.add_argument(\"--input_data\", dest='input_data',\n",
         "                        type=str)\n",
         "    parser.add_argument(\"--output_data\", dest='output_data',\n",
         "                        type=str)\n",
         "\n",
-        "    # parse args\n",
         "    args = parser.parse_args()\n",
         "\n",
-        "    # return args\n",
         "    return args\n",
         "\n",
         "\n",
@@ -161,7 +274,6 @@
       "cell_type": "code",
       "source": [
         "%%writefile src/train-model.py\n",
-        "# import libraries\n",
         "import mlflow\n",
         "import glob\n",
         "import argparse\n",
@@ -271,6 +383,19 @@
       }
     },
     {
+      "cell_type": "markdown",
+      "source": [
+        "##### Definition of pipeline components out of prepare and train scripts"
+      ],
+      "metadata": {
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
+        }
+      }
+    },
+    {
       "cell_type": "code",
       "source": [
         "%%writefile prepare-data.yml\n",
@@ -363,13 +488,36 @@
       }
     },
     {
+      "cell_type": "markdown",
+      "source": [
+        "##### Define, provision with compute and submit pipeline job"
+      ],
+      "metadata": {
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
+        }
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Load components to use them as steps of the pipeline job."
+      ],
+      "metadata": {
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
+        }
+      }
+    },
+    {
       "cell_type": "code",
       "source": [
-        "from azure.ai.ml import load_component\n",
-        "parent_dir = \"\"\n",
-        "\n",
-        "prep_data = load_component(source=parent_dir + \"./prepare-data.yml\")\n",
-        "train_regression = load_component(source=parent_dir + \"./train-model.yml\")"
+        "prep_data = load_component(source= \"./prepare-data.yml\")\n",
+        "train_regression = load_component(source=\"./train-model.yml\")"
       ],
       "outputs": [],
       "execution_count": 7,
@@ -389,12 +537,21 @@
       }
     },
     {
+      "cell_type": "markdown",
+      "source": [
+        "Define the pipeline job. It is designed to accept different target features and a model of choice between Linear, Random Forest and Gradient Boosting Regression."
+      ],
+      "metadata": {
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
+        }
+      }
+    },
+    {
       "cell_type": "code",
       "source": [
-        "from azure.ai.ml import Input\n",
-        "from azure.ai.ml.constants import AssetTypes\n",
-        "from azure.ai.ml.dsl import pipeline\n",
-        "\n",
         "@pipeline()\n",
         "def kw_CPC_prediction(pipeline_job_input,algorithm='linear-regression',target_feature='CPC'):\n",
         "    clean_data = prep_data(input_data=pipeline_job_input)\n",
@@ -425,43 +582,21 @@
       }
     },
     {
-      "cell_type": "code",
+      "cell_type": "markdown",
       "source": [
-        "print(pipeline_job)"
+        "Provision the compute cluster for the pipeline job."
       ],
-      "outputs": [
-        {
-          "output_type": "stream",
-          "name": "stderr",
-          "text": "Class AutoDeleteSettingSchema: This is an experimental class, and may change at any time. Please see https://aka.ms/azuremlexperimental for more information.\nClass AutoDeleteConditionSchema: This is an experimental class, and may change at any time. Please see https://aka.ms/azuremlexperimental for more information.\nClass BaseAutoDeleteSettingSchema: This is an experimental class, and may change at any time. Please see https://aka.ms/azuremlexperimental for more information.\nClass IntellectualPropertySchema: This is an experimental class, and may change at any time. Please see https://aka.ms/azuremlexperimental for more information.\nClass ProtectionLevelSchema: This is an experimental class, and may change at any time. Please see https://aka.ms/azuremlexperimental for more information.\nClass BaseIntellectualPropertySchema: This is an experimental class, and may change at any time. Please see https://aka.ms/azuremlexperimental for more information.\n"
-        },
-        {
-          "output_type": "stream",
-          "name": "stdout",
-          "text": "display_name: kw_CPC_prediction\ntype: pipeline\ninputs:\n  pipeline_job_input:\n    type: uri_file\n    path: azureml:kw-dataset:1\n  algorithm: random-forest\n  target_feature: CPC\noutputs:\n  pipeline_job_transformed_data:\n    type: uri_file\n  pipeline_job_trained_model:\n    type: mlflow_model\njobs:\n  clean_data:\n    type: command\n    inputs:\n      input_data:\n        path: ${{parent.inputs.pipeline_job_input}}\n    outputs:\n      output_data: ${{parent.outputs.pipeline_job_transformed_data}}\n    component:\n      $schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json\n      name: prep_data\n      version: '1'\n      display_name: Prepare training data\n      type: command\n      inputs:\n        input_data:\n          type: uri_file\n      outputs:\n        output_data:\n          type: uri_file\n      command: python prepare-data.py  --input_data ${{inputs.input_data}} --output_data\n        ${{outputs.output_data}}\n      environment: azureml://registries/azureml/environments/sklearn-1.1/versions/34\n      code: /mnt/batch/tasks/shared/LS_root/mounts/clusters/notebook-compute-cpc/code/Users/miguel_lopez_virues/azure_keyword_CPC/src\n      is_deterministic: true\n  train_model:\n    type: command\n    inputs:\n      training_data:\n        path: ${{parent.jobs.clean_data.outputs.output_data}}\n      algorithm:\n        path: ${{parent.inputs.algorithm}}\n      target_feature:\n        path: ${{parent.inputs.target_feature}}\n    outputs:\n      model_output: ${{parent.outputs.pipeline_job_trained_model}}\n    component:\n      $schema: https://azuremlschemas.azureedge.net/latest/commandComponent.schema.json\n      name: train_model\n      version: '1'\n      display_name: Train a linear, gradient boosting or random forest regression\n        model\n      type: command\n      inputs:\n        training_data:\n          type: uri_file\n        algorithm:\n          type: string\n          default: linear-regression\n        target_feature:\n          type: string\n          default: CPC\n      outputs:\n        model_output:\n          type: mlflow_model\n      command: 'python train-model.py  --training_data ${{inputs.training_data}}  --algorithm\n        ${{inputs.algorithm}}  --target_feature ${{inputs.target_feature}}  --model_output\n        ${{outputs.model_output}} '\n      environment: azureml://registries/azureml/environments/sklearn-1.1/versions/34\n      code: /mnt/batch/tasks/shared/LS_root/mounts/clusters/notebook-compute-cpc/code/Users/miguel_lopez_virues/azure_keyword_CPC/src\n      is_deterministic: true\n\n"
-        }
-      ],
-      "execution_count": 9,
       "metadata": {
-        "jupyter": {
-          "source_hidden": false,
-          "outputs_hidden": false
-        },
         "nteract": {
           "transient": {
             "deleting": false
           }
-        },
-        "gather": {
-          "logged": 1717238784904
         }
       }
     },
     {
       "cell_type": "code",
       "source": [
-        "from azure.ai.ml.entities import AmlCompute\n",
-        "\n",
         "cpu_compute_target = \"aml-cluster2\"\n",
         "\n",
         "try:\n",
@@ -483,7 +618,7 @@
         "        tier=\"Dedicated\",\n",
         "    )\n",
         "\n",
-        "    cpu_cluster = ml_client.compute.begin_create_or_update(cpu_cluster)\n"
+        "    cpu_cluster = ml_client.compute.begin_create_or_update(cpu_cluster)"
       ],
       "outputs": [
         {
@@ -509,39 +644,15 @@
       }
     },
     {
-      "cell_type": "code",
+      "cell_type": "markdown",
       "source": [
-        "from azure.ai.ml.entities import AmlCompute\n",
-        "\n",
-        "cluster_scale = AmlCompute(\n",
-        "    name=\"aml-cluster2\",\n",
-        "    max_instances=2,\n",
-        ")\n",
-        "ml_client.begin_create_or_update(cluster_scale)"
+        "Edit the pipeline job attribute values to make sure the output data and model upload to the workspace and use the provisioned compute cluster."
       ],
-      "outputs": [
-        {
-          "output_type": "execute_result",
-          "execution_count": 11,
-          "data": {
-            "text/plain": "<azure.core.polling._poller.LROPoller at 0x7f3a244da1c0>"
-          },
-          "metadata": {}
-        }
-      ],
-      "execution_count": 11,
       "metadata": {
-        "jupyter": {
-          "source_hidden": false,
-          "outputs_hidden": false
-        },
         "nteract": {
           "transient": {
             "deleting": false
           }
-        },
-        "gather": {
-          "logged": 1717238786377
         }
       }
     },
@@ -568,6 +679,19 @@
         },
         "gather": {
           "logged": 1717238787022
+        }
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Submit the data for model training."
+      ],
+      "metadata": {
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
         }
       }
     },
@@ -608,6 +732,32 @@
         },
         "gather": {
           "logged": 1717238794305
+        }
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "### Model registration and deployment"
+      ],
+      "metadata": {
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
+        }
+      }
+    },
+    {
+      "cell_type": "markdown",
+      "source": [
+        "Register the model logged by MLFlow from the *train_data* child job inside the pipeline job. This model will be stored as a development version that can be modifided and continue to evolve."
+      ],
+      "metadata": {
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
         }
       }
     },
@@ -656,6 +806,19 @@
       }
     },
     {
+      "cell_type": "markdown",
+      "source": [
+        "Create the endpoint to deploy the model on."
+      ],
+      "metadata": {
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
+        }
+      }
+    },
+    {
       "cell_type": "code",
       "source": [
         "from azure.ai.ml.entities import ManagedOnlineEndpoint, ManagedOnlineDeployment\n",
@@ -688,10 +851,21 @@
       }
     },
     {
+      "cell_type": "markdown",
+      "source": [
+        "Register a production version of the logged model that will be kept operational for real-time inference to predict CPCs. Then define the Azure managed online deployment that will receive the 100% of the traffic from the endpoint, until a new model is developed to be deployed in a green deployment before fully replacing the current one."
+      ],
+      "metadata": {
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
+        }
+      }
+    },
+    {
       "cell_type": "code",
       "source": [
-        "\n",
-        "\n",
         "production_model = Model(\n",
         "    path=f\"azureml://jobs/{child_job_name}/outputs/artifacts/paths/model/\",\n",
         "    name=\"mlflow-kw-CPC-blue-deployment\",\n",
@@ -830,6 +1004,19 @@
       }
     },
     {
+      "cell_type": "markdown",
+      "source": [
+        "### Sample data to test-invoke the deployed model"
+      ],
+      "metadata": {
+        "nteract": {
+          "transient": {
+            "deleting": false
+          }
+        }
+      }
+    },
+    {
       "cell_type": "code",
       "source": [
         "import json \n",
@@ -884,55 +1071,6 @@
         },
         "gather": {
           "logged": 1717239314675
-        }
-      }
-    },
-    {
-      "cell_type": "code",
-      "source": [
-        "endpoint = ml_client.online_endpoints.get(name=online_endpoint_name)\n",
-        "\n",
-        "print(endpoint.traffic)\n",
-        "\n",
-        "print(endpoint.scoring_uri)"
-      ],
-      "outputs": [
-        {
-          "output_type": "stream",
-          "name": "stdout",
-          "text": "{'blue-kw-cpc': 100}\nhttps://endpoint-cpc-prediction.francecentral.inference.ml.azure.com/score\n"
-        }
-      ],
-      "execution_count": 22,
-      "metadata": {
-        "jupyter": {
-          "source_hidden": false,
-          "outputs_hidden": false
-        },
-        "nteract": {
-          "transient": {
-            "deleting": false
-          }
-        },
-        "gather": {
-          "logged": 1717239316336
-        }
-      }
-    },
-    {
-      "cell_type": "code",
-      "source": [],
-      "outputs": [],
-      "execution_count": null,
-      "metadata": {
-        "jupyter": {
-          "source_hidden": false,
-          "outputs_hidden": false
-        },
-        "nteract": {
-          "transient": {
-            "deleting": false
-          }
         }
       }
     }
